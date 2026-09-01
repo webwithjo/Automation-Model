@@ -63,7 +63,14 @@ async function extractMeetingDetails(emailContext) {
   const ai = getAiClient();
   const defaultTimezone = process.env.TIMEZONE || 'Asia/Kolkata';
   const defaultDuration = process.env.DEFAULT_MEETING_DURATION_MINUTES || 30;
-  const modelName = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
+  
+  // Model priority list for quota resiliency
+  const models = [
+    process.env.GEMINI_MODEL,
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
+    'gemini-3.1-flash-lite'
+  ].filter(Boolean);
 
   const prompt = `
 You are Joyal's smart and polite personal AI assistant. 
@@ -102,12 +109,11 @@ Return structured JSON matching this schema:
 }
 `;
 
-  // Retry with backoff for network/socket errors
   let lastError;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (const model of models) {
     try {
       const response = await ai.models.generateContent({
-        model: modelName,
+        model: model,
         contents: prompt,
         config: { 
           responseMimeType: 'application/json',
@@ -117,17 +123,17 @@ Return structured JSON matching this schema:
       return extractJson(response.text);
     } catch (err) {
       lastError = err;
-      const isTransient = err.message && (err.message.includes('wsarecv') || err.message.includes('socket') || err.message.includes('stream') || err.message.includes('ECONNRESET') || err.message.includes('429'));
-      if (isTransient && attempt < 3) {
-        console.warn(`[WARN] Gemini API call attempt ${attempt} failed (${err.message}). Retrying in ${attempt * 2000}ms...`);
-        await new Promise(r => setTimeout(r, attempt * 2000));
-      } else {
-        break;
+      const isQuotaOrNetwork = err.message && (err.message.includes('429') || err.message.includes('wsarecv') || err.message.includes('socket') || err.message.includes('ECONNRESET') || err.message.includes('NOT_FOUND'));
+      if (isQuotaOrNetwork) {
+        console.warn(`[WARN] Model ${model} encountered error (${err.message.substring(0, 80)}...). Trying next model...`);
+        await new Promise(r => setTimeout(r, 1000));
+        continue;
       }
+      break;
     }
   }
 
-  console.error('[ERROR] Error generating or parsing content from Gemini:', lastError);
+  console.error('[ERROR] Error generating content from Gemini after trying fallback models:', lastError);
   throw lastError;
 }
 
