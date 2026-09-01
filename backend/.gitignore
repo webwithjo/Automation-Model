@@ -3,4 +3,6 @@ node_modules/
 .env.local
 token.json
 processed_messages.json
+src/processed_messages.json
 *.log
+

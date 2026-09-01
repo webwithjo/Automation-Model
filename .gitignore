@@ -5,5 +5,8 @@ backend/.env
 token.json
 backend/token.json
 backend/processed_messages.json
+backend/src/processed_messages.json
+processed_messages.json
 *.log
 .DS_Store
+
