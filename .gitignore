@@ -1,0 +1,9 @@
+node_modules/
+backend/node_modules/
+.env
+backend/.env
+token.json
+backend/token.json
+backend/processed_messages.json
+*.log
+.DS_Store
